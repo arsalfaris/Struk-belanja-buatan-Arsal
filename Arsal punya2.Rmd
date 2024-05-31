@@ -1,0 +1,144 @@
+---
+title: "Struk Belanja"
+output: html_document
+runtime: shiny
+---
+<p id="datetime">Tanggal dan waktu saat ini akan ditampilkan di sini...</p>
+
+<script>
+function updateDateTime() {
+  var now = new Date();
+
+  // Format tanggal
+  var day = now.getDate().toString().padStart(2, '0');
+  var month = (now.getMonth() + 1).toString().padStart(2, '0'); // Januari = 0
+  var year = now.getFullYear();
+
+  // Format waktu
+  var hours = now.getHours().toString().padStart(2, '0');
+  var minutes = now.getMinutes().toString().padStart(2, '0');
+  var seconds = now.getSeconds().toString().padStart(2, '0');
+
+  var dateString = day + '/' + month + '/' + year;
+  var timeString = hours + ':' + minutes + ':' + seconds;
+
+  // Gabungkan tanggal dan waktu
+  var dateTimeString = dateString + ' ' + timeString;
+
+  document.getElementById('datetime').innerHTML = dateTimeString;
+}
+
+// Update the date and time every second
+setInterval(updateDateTime, 1000);
+
+// Initialize the date and time when the page loads
+updateDateTime();
+</script>
+
+```{r setup, include=FALSE}
+library(shiny)
+library(readxl)
+```
+
+## Selamat Datang di One Mart
+
+```{r, echo=FALSE}
+ADM01 <- "Arsal"
+ADM02 <- "Alif"
+ADM03 <- "Justin"
+
+daftar_harga <- read_excel("C:/Users/21031/Downloads/daftar harga produk mini market.xlsx")
+
+ui <- fluidPage(
+  titlePanel("One Mart"),
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("admin_n", "Admin yang bertugas:", choices = c("Arsal", "Alif", "Justin")),
+      numericInput("barang_dibeli", "Barang dibeli (kode):", value = 0, min = 1, max = 228),
+      numericInput("jumlah_barang", "Jumlah barang dibeli:", value = 1, min = 1),
+      actionButton("add_item", "Tambah Barang"),
+      numericInput("jumlah_pembayaran", "Jumlah pembayaran:", value = 0, min = 0),
+      actionButton("proses_pembayaran", "Proses Pembayaran")
+    ),
+    mainPanel(
+      tableOutput("harga_produk"),
+      textOutput("total_harga"),
+      textOutput("uang_kurang"),
+      textOutput("hasil_pembayaran"),
+      verbatimTextOutput("struk")
+    )
+  )
+)
+
+server <- function(input, output, session) {
+  total_barang_dibeli <- reactiveVal(c())
+  list_harga <- reactiveVal(numeric())
+  total_harga_barang <- reactiveVal(numeric())
+  total_jumlah_barang <- reactiveVal(numeric())
+
+  observeEvent(input$admin_n, {
+    admin_n <- switch(input$admin_n, "ADM01" = ADM01, "ADM02" = ADM02, "ADM03" = ADM03, input$admin_n)
+    output$admin_name <- renderText({ admin_n })
+  })
+
+  observeEvent(input$add_item, {
+    if (input$barang_dibeli >= 1 & input$barang_dibeli <= 228) {
+      harga <- as.numeric(daftar_harga[input$barang_dibeli, 3])
+      menu <- as.character(daftar_harga[input$barang_dibeli, 1])
+
+      new_total_harga_barang <- c(total_harga_barang(), harga * input$jumlah_barang)
+      new_total_jumlah_barang <- c(total_jumlah_barang(), input$jumlah_barang)
+      new_total_barang_dibeli <- c(total_barang_dibeli(), menu)
+      new_list_harga <- c(list_harga(), harga)
+
+      total_harga_barang(new_total_harga_barang)
+      total_jumlah_barang(new_total_jumlah_barang)
+      total_barang_dibeli(new_total_barang_dibeli)
+      list_harga(new_list_harga)
+    }
+  })
+
+  output$total_harga <- renderText({
+    total <- sum(total_harga_barang())
+    paste("Total Harga: Rp", total)
+  })
+
+  observeEvent(input$proses_pembayaran, {
+    total <- sum(total_harga_barang())
+    jumlah_pembayaran <- input$jumlah_pembayaran
+
+    while (jumlah_pembayaran < total) {
+      uang_kurang <- total - jumlah_pembayaran
+      output$uang_kurang <- renderText({ paste("Uang yang diserahkan kurang sebanyak Rp", uang_kurang) })
+      tambahan <- as.numeric(isolate(input$uang_tambahan))
+      jumlah_pembayaran <- jumlah_pembayaran + tambahan
+    }
+
+    hasil <- jumlah_pembayaran - total
+
+    output$hasil_pembayaran <- renderText({ paste("Kembalian: Rp", hasil) })
+
+    garis <- "====================================================\n"
+    struk <- paste(
+      "\t\t    ONE MART\n\t\tKudapan BNI Unhas\n\t\tTHE KING OF JILID\n\n\n",
+      format(Sys.time(), "%d/%m/%Y %H:%M:%S"), paste0("\t\t\t-", input$admin_n, "-\n",
+      garis),
+     paste0(" Barang Dibeli: \t\t\tTotal: \n",
+      garis), paste0(paste0(
+      paste(
+        sapply(1:length(total_barang_dibeli()), function(i) {
+          paste(paste0(i, "."), "Rp", list_harga()[i], paste0("x",  total_jumlah_barang()[i]), "\t\t\t\tRp", total_harga_barang()[i], "\n   ", total_barang_dibeli()[i], "\n\n")
+        }), collapse = "\n"
+      )),
+      garis),
+      "\t\t\tTotal Harga:\tRp", sprintf("%.2f", total), paste0("\n",
+      "\t\t\tPembayaran: \tRp"), sprintf("%.2f", jumlah_pembayaran), paste0("\n",
+      "\t\t\tKembalian:\tRp"), sprintf("%.2f", hasil), paste0("\n\n\n",
+      "\t\t   TERIMA KASIH\n\t\tPusat Print Online")
+    )
+    output$struk <- renderText({ struk })
+  })
+}
+
+shinyApp(ui = ui, server = server)
+```
